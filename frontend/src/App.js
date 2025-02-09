@@ -56,7 +56,7 @@ export default function App() {
 
   return (
     <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-      <h2>🔥 廃熱回収システム モニタリング</h2>
+      <h1>株式会社ショウワ　排熱回収システム モニタリング</h1>
 
       {/* 🔹 デバイス選択 */}
       <label>デバイスを選択:</label>
