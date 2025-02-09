@@ -1,65 +1,100 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import React, { useState, useEffect } from "react";
 
-function App() {
-  const [latestData, setLatestData] = useState({ tempC1: 0, vReal1: 0 });
-  const [chartData, setChartData] = useState([]);
-  const [error, setError] = useState("");
+const API_BASE_URL = "https://sdsensor1.onrender.com"; // 🔹 バックエンドのURL
 
-  const backendUrl = "https://hainetukaishusouti.onrender.com";
-  const deviceId = "SDsensor-demo1"; // デバイスIDを修正
+export default function App() {
+  const [devices, setDevices] = useState([]);
+  const [selectedDevice, setSelectedDevice] = useState("");
+  const [deviceData, setDeviceData] = useState(null);
+  const [costs, setCosts] = useState({ realTime: 0, hour: 0, day: 0, future: {} });
 
+  // 🔹 デバイスID一覧を取得
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await axios.get(`${backendUrl}/api/data/${deviceId}`);
-        const data = response.data;
+    fetch(`${API_BASE_URL}/api/devices`)
+      .then((res) => res.json())
+      .then((data) => setDevices(data))
+      .catch((err) => console.error("Error fetching devices:", err));
+  }, []);
 
-        if (data && data.tempC1 !== undefined && data.vReal1 !== undefined) {
-          setLatestData({ tempC1: data.tempC1, vReal1: data.vReal1 });
+  // 🔹 選択したデバイスの情報を取得
+  useEffect(() => {
+    if (!selectedDevice) return;
 
-          // グラフデータを更新
-          setChartData((prevData) => [...prevData.slice(-19), { time: new Date().toLocaleTimeString(), ...data }]);
-        } else {
-          throw new Error("無効なデータを受信しました。");
-        }
-        setError("");
-      } catch (error) {
-        console.error("データ取得エラー:", error);
-        setError("データの取得に失敗しました (前回のデータを表示中)");
-      }
-    };
+    // 📌 温度データ取得
+    fetch(`${API_BASE_URL}/api/data/${selectedDevice}`)
+      .then((res) => res.json())
+      .then((data) => setDeviceData(data))
+      .catch((err) => console.error("Error fetching device data:", err));
 
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, [backendUrl, deviceId]);
+    // 📌 コスト情報取得
+    fetch(`${API_BASE_URL}/api/price/${selectedDevice}`)
+      .then((res) => res.json())
+      .then((data) => setCosts((prev) => ({ ...prev, realTime: parseFloat(data.price) || 0 })))
+      .catch((err) => console.error("Error fetching real-time price:", err));
+
+    fetch(`${API_BASE_URL}/api/price/hour/${selectedDevice}`)
+      .then((res) => res.json())
+      .then((data) => setCosts((prev) => ({ ...prev, hour: parseFloat(data.totalPrice) || 0 })))
+      .catch((err) => console.error("Error fetching hourly price:", err));
+
+    fetch(`${API_BASE_URL}/api/price/day/${selectedDevice}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const dailyCost = parseFloat(data.totalPrice) || 0;
+        setCosts((prev) => ({
+          ...prev,
+          day: dailyCost,
+          future: {
+            day200: (dailyCost * 200).toFixed(2),
+            day300: (dailyCost * 300).toFixed(2),
+            day365: (dailyCost * 365).toFixed(2),
+          },
+        }));
+      })
+      .catch((err) => console.error("Error fetching daily price:", err));
+  }, [selectedDevice]);
 
   return (
-    <div>
-      <h1>ショウワ　SDセンサ</h1>
-      <h2>現在の振動データ＆温度データ</h2>
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      <div>
-        <h2>最新データ</h2>
-        <p><strong>温度 (°C):</strong> {latestData.tempC1} °C</p>
-        <p><strong>振動 (Hz):</strong> {latestData.vReal1} Hz</p>
-      </div>
-      <h2>現在のデータグラフ</h2>
-      <ResponsiveContainer width="90%" height={400}>
-        <LineChart data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="time" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          <Line type="monotone" dataKey="tempC1" stroke="#8884d8" name="温度 (°C)" />
-          <Line type="monotone" dataKey="vReal1" stroke="#82ca9d" name="振動 (Hz)" />
-        </LineChart>
-      </ResponsiveContainer>
+    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
+      <h2>🔥 廃熱回収システム モニタリング</h2>
+
+      {/* 🔹 デバイス選択 */}
+      <label>デバイスを選択:</label>
+      <select onChange={(e) => setSelectedDevice(e.target.value)}>
+        <option value="">選択してください</option>
+        {devices.map((device, index) => (
+          <option key={index} value={device}>
+            {device}
+          </option>
+        ))}
+      </select>
+
+      {/* 🔹 データ表示 */}
+      {selectedDevice && deviceData && (
+        <div style={{ marginTop: "20px", border: "1px solid #ccc", padding: "10px", borderRadius: "5px" }}>
+          <h3>📡 {selectedDevice} のデータ</h3>
+          <p>📅 取得時刻: {deviceData.time}</p>
+
+          {/* 🔥 温度情報 */}
+          <h4>🌡️ 温度データ</h4>
+          <p>tempC1: {deviceData.tempC[0]}°C</p>
+          <p>tempC2: {deviceData.tempC[1]}°C</p>
+          <p>tempC3: {deviceData.tempC[2]}°C</p>
+          <p>tempC4: {deviceData.tempC[3]}°C</p>
+
+          {/* 💰 コスト情報 */}
+          <h4>💰 コスト情報</h4>
+          <p>🔸 リアルタイムのコスト: ¥{costs.realTime.toFixed(2)}</p>
+          <p>🔸 過去1時間のコスト合計: ¥{costs.hour.toFixed(2)}</p>
+          <p>🔸 過去1日のコスト合計: ¥{costs.day.toFixed(2)}</p>
+
+          {/* 📊 予測コスト */}
+          <h4>📊 予測コスト</h4>
+          <p>200日: ¥{costs.future.day200}</p>
+          <p>300日: ¥{costs.future.day300}</p>
+          <p>365日: ¥{costs.future.day365}</p>
+        </div>
+      )}
     </div>
   );
 }
-
-export default App;
