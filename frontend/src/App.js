@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 
 const API_BASE_URL = "https://sdsensor1.onrender.com"; // 🔹 バックエンドのURL
-const DEVICE_IDS = ["hainetsukaishu-demo1", "hainetsukaishu-demo2, takahashigarilei"]; // 🔹 デバイスIDをフロントエンドで直接定義
+const DEVICE_IDS = ["hainetsukaishu-demo1", "hainetsukaishu-demo2", "takahashigarilei", "kurodasika"]; // 🔹 4つのデバイスIDを定義
 
 export default function App() {
   const [selectedDevice, setSelectedDevice] = useState("");
@@ -100,3 +100,4 @@ export default function App() {
     </div>
   );
 }
+
