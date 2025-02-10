@@ -1,124 +1,96 @@
-import React, { useState, useEffect } from "react";
+const express = require("express");
+const { CosmosClient } = require("@azure/cosmos");
+const cors = require("cors");
+const WebSocket = require("ws");
+require("dotenv").config();
 
-const API_BASE_URL = "https://sdsensor1.onrender.com"; // 🔹 バックエンドのURL
-const DEVICE_IDS = ["hainetsukaishu-demo1", "hainetsukaishu-demo2", "takahashigarilei", "kurodasika"]; // 🔹 4つのデバイスIDを定義
+const app = express();
+const PORT = 3098;
+const server = app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
+const wss = new WebSocket.Server({ server });
 
-export default function App() {
-  const [selectedDevice, setSelectedDevice] = useState("");
-  const [deviceData, setDeviceData] = useState(null);
-  const [costs, setCosts] = useState({ realTime: null, hour: null, day: null, future: {} });
+// Cosmos DB 接続情報
+const endpoint = process.env.COSMOSDB_ENDPOINT;
+const key = process.env.COSMOSDB_KEY;
+const client = new CosmosClient({ endpoint, key });
+const databaseId = process.env.DATABASE_ID;
+const containerId = process.env.CONTAINER_ID;
 
-  console.log("Available Device IDs:", DEVICE_IDS); // ✅ デバイスリストをデバッグ
+// ミドルウェア
+app.use(cors());
+app.use(express.json());
 
-  // 🔹 選択したデバイスの情報を取得
-  useEffect(() => {
-    if (!selectedDevice) return;
+// ルートエンドポイント
+app.get("/", (req, res) => {
+  res.send("Backend is running!");
+});
 
-    console.log("Fetching data for:", selectedDevice); // ✅ 選択されたデバイスをデバッグ
+// 最新データの取得（deviceId を固定）
+app.get("/api/data/takahashigarilei", async (req, res) => {
+  const deviceId = "takahashigarilei";
+  try {
+    const database = client.database(databaseId);
+    const container = database.container(containerId);
+    const querySpec = {
+      query: `SELECT TOP 1 * FROM c WHERE c.device = @deviceId ORDER BY c.time DESC`,
+      parameters: [{ name: "@deviceId", value: deviceId }],
+    };
 
-    // 📌 温度データ取得
-    fetch(`${API_BASE_URL}/api/data/${selectedDevice}`)
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("Received device data:", data); // ✅ データをデバッグ
-        setDeviceData(data || "データなし");
-      })
-      .catch((err) => {
-        console.error("Error fetching device data:", err);
-        setDeviceData("データなし");
-      });
+    const { resources: items } = await container.items.query(querySpec).fetchAll();
+    if (items.length === 0) {
+      return res.status(404).json({ error: `No data found for deviceId: ${deviceId}` });
+    }
 
-    // 📌 コスト情報取得
-    fetch(`${API_BASE_URL}/api/price/${selectedDevice}`)
-      .then((res) => res.json())
-      .then((data) => setCosts((prev) => ({ ...prev, realTime: data?.price ?? "データなし" })))
-      .catch((err) => {
-        console.error("Error fetching real-time price:", err);
-        setCosts((prev) => ({ ...prev, realTime: "データなし" }));
-      });
+    const latestData = items[0];
+    const responseData = {
+      device: latestData.device,
+      time: latestData.time,
+      vReal: [latestData.vReal1, latestData.vReal2, latestData.vReal3, latestData.vReal4, latestData.vReal5, latestData.vReal6],
+      tempC: [latestData.tempC1, latestData.tempC2, latestData.tempC3, latestData.tempC4, latestData.tempC5, latestData.tempC6],
+      flow: [latestData.Flow1, latestData.Flow2]
+    };
 
-    fetch(`${API_BASE_URL}/api/price/hour/${selectedDevice}`)
-      .then((res) => res.json())
-      .then((data) => setCosts((prev) => ({ ...prev, hour: data?.totalPrice ?? "データなし" })))
-      .catch((err) => {
-        console.error("Error fetching hourly price:", err);
-        setCosts((prev) => ({ ...prev, hour: "データなし" }));
-      });
+    res.status(200).json(responseData);
+  } catch (error) {
+    console.error("Error fetching latest data:", error);
+    res.status(500).json({ error: "Failed to fetch latest data" });
+  }
+});
 
-    fetch(`${API_BASE_URL}/api/price/day/${selectedDevice}`)
-      .then((res) => res.json())
-      .then((data) => {
-        const dailyCost = data?.totalPrice ?? "データなし";
-        setCosts((prev) => ({
-          ...prev,
-          day: dailyCost,
-          future: {
-            day200: dailyCost !== "データなし" ? (dailyCost * 200).toFixed(2) : "データなし",
-            day300: dailyCost !== "データなし" ? (dailyCost * 300).toFixed(2) : "データなし",
-            day365: dailyCost !== "データなし" ? (dailyCost * 365).toFixed(2) : "データなし",
-          },
-        }));
-      })
-      .catch((err) => {
-        console.error("Error fetching daily price:", err);
-        setCosts((prev) => ({
-          ...prev,
-          day: "データなし",
-          future: { day200: "データなし", day300: "データなし", day365: "データなし" },
-        }));
-      });
-  }, [selectedDevice]);
+// WebSocket 通信
+wss.on("connection", (ws) => {
+  console.log("WebSocket connected");
 
-  return (
-    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-      <h1>株式会社ショウワ　排熱回収システム モニタリング</h1>
+  ws.on("message", async () => {
+    const deviceId = "kurodashika";
+    try {
+      const database = client.database(databaseId);
+      const container = database.container(containerId);
+      const querySpec = {
+        query: `SELECT TOP 1 * FROM c WHERE c.device = @deviceId ORDER BY c.time DESC`,
+        parameters: [{ name: "@deviceId", value: deviceId }],
+      };
 
-      {/* 🔹 デバイス選択 */}
-      <label>デバイスを選択:</label>
-      <select
-        onChange={(e) => {
-          console.log("Selected Device:", e.target.value); // ✅ 選択されたデバイスをデバッグ
-          setSelectedDevice(e.target.value);
-        }}
-      >
-        <option value="">選択してください</option>
-        {DEVICE_IDS.map((device, index) => (
-          <option key={index} value={device}>
-            {device}
-          </option>
-        ))}
-      </select>
+      const { resources: items } = await container.items.query(querySpec).fetchAll();
+      if (items.length > 0) {
+        const latestData = items[0];
+        const responseData = {
+          device: latestData.device,
+          time: latestData.time,
+          vReal: [latestData.vReal1, latestData.vReal2, latestData.vReal3, latestData.vReal4, latestData.vReal5, latestData.vReal6],
+          tempC: [latestData.tempC1, latestData.tempC2, latestData.tempC3, latestData.tempC4, latestData.tempC5, latestData.tempC6],
+          flow: [latestData.Flow1, latestData.Flow2]
+        };
+        ws.send(JSON.stringify(responseData));
+      }
+    } catch (error) {
+      console.error("WebSocket Error:", error);
+    }
+  });
 
-      {/* 🔹 データ表示 */}
-      {selectedDevice && (
-        <div style={{ marginTop: "20px", border: "1px solid #ccc", padding: "10px", borderRadius: "5px" }}>
-          <h3>📡 {selectedDevice} のデータ</h3>
-          {deviceData === "データなし" ? (
-            <p>データなし</p>
-          ) : (
-            <>
-              <p>📅 取得時刻: {deviceData.time}</p>
-
-              {/* 🔥 温度情報 */}
-              <h4>🌡️ 温度データ</h4>
-              <p>tempC1: {deviceData.tempC?.[0] ?? "データなし"}°C</p>
-              <p>tempC2: {deviceData.tempC?.[1] ?? "データなし"}°C</p>
-
-              {/* 💰 コスト情報 */}
-              <h4>💰 コスト情報</h4>
-              <p>🔸 リアルタイムのコスト: ¥{costs.realTime}</p>
-              <p>🔸 過去1時間のコスト合計: ¥{costs.hour}</p>
-              <p>🔸 過去1日のコスト合計: ¥{costs.day}</p>
-
-              {/* 📊 予測コスト */}
-              <h4>📊 予測コスト</h4>
-              <p>200日: ¥{costs.future.day200}</p>
-              <p>300日: ¥{costs.future.day300}</p>
-              <p>365日: ¥{costs.future.day365}</p>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+  ws.on("close", () => {
+    console.log("WebSocket disconnected");
+  });
+});
