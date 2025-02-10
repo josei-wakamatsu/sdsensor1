@@ -5,7 +5,7 @@ const WebSocket = require("ws");
 require("dotenv").config();
 
 const app = express();
-const PORT = 3098;
+const PORT = 3097;
 const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
