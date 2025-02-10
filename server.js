@@ -5,7 +5,7 @@ const WebSocket = require("ws");
 require("dotenv").config();
 
 const app = express();
-const PORT = 3097;
+const PORT = process.env.PORT || 3097;
 const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
@@ -22,12 +22,18 @@ const containerId = process.env.CONTAINER_ID;
 app.use(cors());
 app.use(express.json());
 
-// **対象のデバイスリストに `kurodasika` を追加**
+// **デバイスリストに `kurodasika` を追加**
 const DEVICE_IDS = [
   "hainetsukaishu-demo1",
   "hainetsukaishu-demo2",
-  "takahashigarilei"
+  "takahashigarilei",
+  "kurodasika"
 ];
+
+// ✅ **1. `/` にルートを追加**
+app.get("/", (req, res) => {
+  res.status(200).json({ message: "Backend is running!" });
+});
 
 // **熱量計算関数**
 function calculatePrice(tempDiff, flow, unitPrice) {
@@ -38,32 +44,43 @@ function calculatePrice(tempDiff, flow, unitPrice) {
   return energy_kJ * unitPrice / 3600; // kJ → kWh
 }
 
-// ✅ **1. 特定の deviceId のリアルタイム価格を取得**
+// ✅ **2. `/api/price/:deviceId` (リアルタイム価格取得)**
 app.get("/api/price/:deviceId", async (req, res) => {
   const { deviceId } = req.params;
-  const unitPrice = 0.1; // **1kWh あたりの単価（仮）**
+  console.log("Received deviceId:", deviceId);
 
   if (!DEVICE_IDS.includes(deviceId)) {
+    console.error("Invalid deviceId:", deviceId);
     return res.status(400).json({ error: "Invalid deviceId" });
   }
 
   try {
     const database = client.database(databaseId);
     const container = database.container(containerId);
+    console.log(`Querying database for deviceId: ${deviceId}`);
+
     const querySpec = {
       query: `SELECT TOP 1 * FROM c WHERE c.device = @deviceId ORDER BY c.time DESC`,
       parameters: [{ name: "@deviceId", value: deviceId }],
     };
 
     const { resources: items } = await container.items.query(querySpec).fetchAll();
+
+    console.log("Query result:", items);
+
     if (items.length === 0) {
+      console.error(`No data found for deviceId: ${deviceId}`);
       return res.status(404).json({ error: `No data found for deviceId: ${deviceId}` });
     }
 
     const latestData = items[0];
+    console.log("Latest Data:", latestData);
     const tempDiff = latestData.tempC4 - latestData.tempC3;
     const flow = latestData.Flow1;
-    const price = calculatePrice(tempDiff, flow, unitPrice);
+    console.log("Temperature Difference:", tempDiff);
+    console.log("Flow Rate:", flow);
+    const price = calculatePrice(tempDiff, flow, 0.1);
+    console.log("Calculated Price:", price);
 
     res.status(200).json({
       device: deviceId,
@@ -76,7 +93,7 @@ app.get("/api/price/:deviceId", async (req, res) => {
   }
 });
 
-// ✅ **2. 過去1時間の合計価格を取得**
+// ✅ **3. `/api/price/hour/:deviceId` (過去1時間の合計価格)**
 app.get("/api/price/hour/:deviceId", async (req, res) => {
   const { deviceId } = req.params;
   const unitPrice = 0.1;
@@ -112,7 +129,7 @@ app.get("/api/price/hour/:deviceId", async (req, res) => {
   }
 });
 
-// ✅ **3. 過去1日の合計価格を取得**
+// ✅ **4. `/api/price/day/:deviceId` (過去1日の合計価格)**
 app.get("/api/price/day/:deviceId", async (req, res) => {
   const { deviceId } = req.params;
   const unitPrice = 0.1;
