@@ -6,7 +6,7 @@ const DEVICE_IDS = ["hainetsukaishu-demo1", "hainetsukaishu-demo2", "takahashiga
 export default function App() {
   const [selectedDevice, setSelectedDevice] = useState("");
   const [deviceData, setDeviceData] = useState(null);
-  const [costs, setCosts] = useState({ realTime: 0, hour: 0, day: 0, future: {} });
+  const [costs, setCosts] = useState({ realTime: null, hour: null, day: null, future: {} });
 
   console.log("Available Device IDs:", DEVICE_IDS); // ✅ デバイスリストをデバッグ
 
@@ -21,36 +21,52 @@ export default function App() {
       .then((res) => res.json())
       .then((data) => {
         console.log("Received device data:", data); // ✅ データをデバッグ
-        setDeviceData(data);
+        setDeviceData(data || "データなし");
       })
-      .catch((err) => console.error("Error fetching device data:", err));
+      .catch((err) => {
+        console.error("Error fetching device data:", err);
+        setDeviceData("データなし");
+      });
 
     // 📌 コスト情報取得
     fetch(`${API_BASE_URL}/api/price/${selectedDevice}`)
       .then((res) => res.json())
-      .then((data) => setCosts((prev) => ({ ...prev, realTime: parseFloat(data.price) || 0 })))
-      .catch((err) => console.error("Error fetching real-time price:", err));
+      .then((data) => setCosts((prev) => ({ ...prev, realTime: data?.price ?? "データなし" })))
+      .catch((err) => {
+        console.error("Error fetching real-time price:", err);
+        setCosts((prev) => ({ ...prev, realTime: "データなし" }));
+      });
 
     fetch(`${API_BASE_URL}/api/price/hour/${selectedDevice}`)
       .then((res) => res.json())
-      .then((data) => setCosts((prev) => ({ ...prev, hour: parseFloat(data.totalPrice) || 0 })))
-      .catch((err) => console.error("Error fetching hourly price:", err));
+      .then((data) => setCosts((prev) => ({ ...prev, hour: data?.totalPrice ?? "データなし" })))
+      .catch((err) => {
+        console.error("Error fetching hourly price:", err);
+        setCosts((prev) => ({ ...prev, hour: "データなし" }));
+      });
 
     fetch(`${API_BASE_URL}/api/price/day/${selectedDevice}`)
       .then((res) => res.json())
       .then((data) => {
-        const dailyCost = parseFloat(data.totalPrice) || 0;
+        const dailyCost = data?.totalPrice ?? "データなし";
         setCosts((prev) => ({
           ...prev,
           day: dailyCost,
           future: {
-            day200: (dailyCost * 200).toFixed(2),
-            day300: (dailyCost * 300).toFixed(2),
-            day365: (dailyCost * 365).toFixed(2),
+            day200: dailyCost !== "データなし" ? (dailyCost * 200).toFixed(2) : "データなし",
+            day300: dailyCost !== "データなし" ? (dailyCost * 300).toFixed(2) : "データなし",
+            day365: dailyCost !== "データなし" ? (dailyCost * 365).toFixed(2) : "データなし",
           },
         }));
       })
-      .catch((err) => console.error("Error fetching daily price:", err));
+      .catch((err) => {
+        console.error("Error fetching daily price:", err);
+        setCosts((prev) => ({
+          ...prev,
+          day: "データなし",
+          future: { day200: "データなし", day300: "データなし", day365: "データなし" },
+        }));
+      });
   }, [selectedDevice]);
 
   return (
@@ -74,30 +90,35 @@ export default function App() {
       </select>
 
       {/* 🔹 データ表示 */}
-      {selectedDevice && deviceData && (
+      {selectedDevice && (
         <div style={{ marginTop: "20px", border: "1px solid #ccc", padding: "10px", borderRadius: "5px" }}>
           <h3>📡 {selectedDevice} のデータ</h3>
-          <p>📅 取得時刻: {deviceData.time}</p>
+          {deviceData === "データなし" ? (
+            <p>データなし</p>
+          ) : (
+            <>
+              <p>📅 取得時刻: {deviceData.time}</p>
 
-          {/* 🔥 温度情報 */}
-          <h4>🌡️ 温度データ</h4>
-          <p>tempC1: {deviceData.tempC[0]}°C</p>
-          <p>tempC2: {deviceData.tempC[1]}°C</p>
+              {/* 🔥 温度情報 */}
+              <h4>🌡️ 温度データ</h4>
+              <p>tempC1: {deviceData.tempC?.[0] ?? "データなし"}°C</p>
+              <p>tempC2: {deviceData.tempC?.[1] ?? "データなし"}°C</p>
 
-          {/* 💰 コスト情報 */}
-          <h4>💰 コスト情報</h4>
-          <p>🔸 リアルタイムのコスト: ¥{costs.realTime.toFixed(2)}</p>
-          <p>🔸 過去1時間のコスト合計: ¥{costs.hour.toFixed(2)}</p>
-          <p>🔸 過去1日のコスト合計: ¥{costs.day.toFixed(2)}</p>
+              {/* 💰 コスト情報 */}
+              <h4>💰 コスト情報</h4>
+              <p>🔸 リアルタイムのコスト: ¥{costs.realTime}</p>
+              <p>🔸 過去1時間のコスト合計: ¥{costs.hour}</p>
+              <p>🔸 過去1日のコスト合計: ¥{costs.day}</p>
 
-          {/* 📊 予測コスト */}
-          <h4>📊 予測コスト</h4>
-          <p>200日: ¥{costs.future.day200}</p>
-          <p>300日: ¥{costs.future.day300}</p>
-          <p>365日: ¥{costs.future.day365}</p>
+              {/* 📊 予測コスト */}
+              <h4>📊 予測コスト</h4>
+              <p>200日: ¥{costs.future.day200}</p>
+              <p>300日: ¥{costs.future.day300}</p>
+              <p>365日: ¥{costs.future.day365}</p>
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
-
