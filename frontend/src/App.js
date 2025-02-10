@@ -1,29 +1,28 @@
 import React, { useState, useEffect } from "react";
 
 const API_BASE_URL = "https://sdsensor1.onrender.com"; // 🔹 バックエンドのURL
+const DEVICE_IDS = ["hainetsukaishu-demo1", "hainetsukaishu-demo2, takahashigarilei"]; // 🔹 デバイスIDをフロントエンドで直接定義
 
 export default function App() {
-  const [devices, setDevices] = useState([]);
   const [selectedDevice, setSelectedDevice] = useState("");
   const [deviceData, setDeviceData] = useState(null);
   const [costs, setCosts] = useState({ realTime: 0, hour: 0, day: 0, future: {} });
 
-  // 🔹 デバイスID一覧を取得
-  useEffect(() => {
-    fetch(`${API_BASE_URL}/api/devices`)
-      .then((res) => res.json())
-      .then((data) => setDevices(data))
-      .catch((err) => console.error("Error fetching devices:", err));
-  }, []);
+  console.log("Available Device IDs:", DEVICE_IDS); // ✅ デバイスリストをデバッグ
 
   // 🔹 選択したデバイスの情報を取得
   useEffect(() => {
     if (!selectedDevice) return;
 
+    console.log("Fetching data for:", selectedDevice); // ✅ 選択されたデバイスをデバッグ
+
     // 📌 温度データ取得
     fetch(`${API_BASE_URL}/api/data/${selectedDevice}`)
       .then((res) => res.json())
-      .then((data) => setDeviceData(data))
+      .then((data) => {
+        console.log("Received device data:", data); // ✅ データをデバッグ
+        setDeviceData(data);
+      })
       .catch((err) => console.error("Error fetching device data:", err));
 
     // 📌 コスト情報取得
@@ -60,9 +59,14 @@ export default function App() {
 
       {/* 🔹 デバイス選択 */}
       <label>デバイスを選択:</label>
-      <select onChange={(e) => setSelectedDevice(e.target.value)}>
+      <select
+        onChange={(e) => {
+          console.log("Selected Device:", e.target.value); // ✅ 選択されたデバイスをデバッグ
+          setSelectedDevice(e.target.value);
+        }}
+      >
         <option value="">選択してください</option>
-        {devices.map((device, index) => (
+        {DEVICE_IDS.map((device, index) => (
           <option key={index} value={device}>
             {device}
           </option>
@@ -79,8 +83,6 @@ export default function App() {
           <h4>🌡️ 温度データ</h4>
           <p>tempC1: {deviceData.tempC[0]}°C</p>
           <p>tempC2: {deviceData.tempC[1]}°C</p>
-          <p>tempC3: {deviceData.tempC[2]}°C</p>
-          <p>tempC4: {deviceData.tempC[3]}°C</p>
 
           {/* 💰 コスト情報 */}
           <h4>💰 コスト情報</h4>

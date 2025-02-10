@@ -22,13 +22,11 @@ const containerId = process.env.CONTAINER_ID;
 app.use(cors());
 app.use(express.json());
 
-// **対象のデバイスリスト**
+// **対象のデバイスリストに `kurodasika` を追加**
 const DEVICE_IDS = [
   "hainetsukaishu-demo1",
   "hainetsukaishu-demo2",
-  "hainetsukaishu-demo3",
-  "hainetsukaishu-demo4",
-  "hainetsukaishu-demo5"
+  "takahashigarilei"
 ];
 
 // **熱量計算関数**
