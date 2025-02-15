@@ -23,23 +23,29 @@ app.use(express.json());
 // 固定デバイス ID
 const DEVICE_ID = "hainetsukaishu-demo1";
 
+// 単価（円/kWh）
+const unitCosts = {
+  electricity: 30, // 電気代
+  gas: 20,         // ガス代
+  kerosene: 15,    // 灯油代
+  heavy_oil: 10,   // 重油代
+};
+
 // 熱量計算関数
 function calculateEnergy(tempDiff, flow) {
   const specificHeat = 4.186; // 水の比熱 (kJ/kg・℃)
   const density = 1000; // 水の密度 (kg/m³)
-
   return tempDiff * flow * density * specificHeat; // kJ
 }
 
-// 料金計算関数（電気代・ガス代・灯油代）
+// 料金計算関数
 function calculateCost(energy_kJ) {
   const kWh = energy_kJ / 3600; // kJ → kWh
-
   return {
-    electricity: kWh * 30, // 30円/kWh
-    gas: kWh * 20, // 20円/kWh
-    kerosene: kWh * 15, // 15円/kWh
-    heavy_oil: kWh * 10, // 10円/kWh
+    electricity: (kWh * unitCosts.electricity).toFixed(2),
+    gas: (kWh * unitCosts.gas).toFixed(2),
+    kerosene: (kWh * unitCosts.kerosene).toFixed(2),
+    heavy_oil: (kWh * unitCosts.heavy_oil).toFixed(2),
   };
 }
 
@@ -55,13 +61,12 @@ app.get("/api/realtime", async (req, res) => {
     };
 
     const { resources: items } = await container.items.query(querySpec).fetchAll();
-
     if (items.length === 0) {
       return res.status(404).json({ error: "No data found" });
     }
 
     const latestData = items[0];
-    const tempDiff = latestData.tempC4 - latestData.tempC3;
+    const tempDiff = latestData.tempC4 - latestData.tempC3; // 排水温度差
     const flow = latestData.Flow1;
     const energy = calculateEnergy(tempDiff, flow);
     const cost = calculateCost(energy);
@@ -70,13 +75,14 @@ app.get("/api/realtime", async (req, res) => {
       device: DEVICE_ID,
       time: latestData.time,
       temperature: {
-        tempC1: latestData.tempC1,
-        tempC2: latestData.tempC2,
-        tempC3: latestData.tempC3,
-        tempC4: latestData.tempC4,
+        supply1: latestData.tempC1,
+        supply2: latestData.tempC2,
+        discharge1: latestData.tempC3,
+        discharge2: latestData.tempC4,
       },
       flow: latestData.Flow1,
       energy: energy.toFixed(2),
+      unitCosts,
       cost,
     });
   } catch (error) {
@@ -108,11 +114,11 @@ app.get("/api/daily", async (req, res) => {
     };
 
     const { resources: items } = await container.items.query(querySpec).fetchAll();
-
     if (items.length === 0) {
       return res.status(404).json({ error: "No data found for the day" });
     }
 
+    // 1日分の熱量合計
     const totalEnergy = items.reduce((sum, data) => {
       const tempDiff = data.tempC4 - data.tempC3;
       const flow = data.Flow1;
@@ -120,11 +126,34 @@ app.get("/api/daily", async (req, res) => {
     }, 0);
 
     const totalCost = calculateCost(totalEnergy);
+    
+    // 年間コストメリット計算
+    const yearlySavings = {
+      "240 days": {
+        electricity: (totalCost.electricity * 240).toFixed(2),
+        gas: (totalCost.gas * 240).toFixed(2),
+        kerosene: (totalCost.kerosene * 240).toFixed(2),
+        heavy_oil: (totalCost.heavy_oil * 240).toFixed(2),
+      },
+      "300 days": {
+        electricity: (totalCost.electricity * 300).toFixed(2),
+        gas: (totalCost.gas * 300).toFixed(2),
+        kerosene: (totalCost.kerosene * 300).toFixed(2),
+        heavy_oil: (totalCost.heavy_oil * 300).toFixed(2),
+      },
+      "365 days": {
+        electricity: (totalCost.electricity * 365).toFixed(2),
+        gas: (totalCost.gas * 365).toFixed(2),
+        kerosene: (totalCost.kerosene * 365).toFixed(2),
+        heavy_oil: (totalCost.heavy_oil * 365).toFixed(2),
+      },
+    };
 
     res.status(200).json({
       device: DEVICE_ID,
       totalEnergy: totalEnergy.toFixed(2),
       totalCost,
+      yearlySavings,
     });
   } catch (error) {
     console.error("Error fetching daily data:", error);
