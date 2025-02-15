@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-const backendUrl = "https://unozawa-sdsensor-backend.onrender.com";
+const backendUrl = "https://sdsensor1.onrender.com";
 
 const App = () => {
   const [realTimeData, setRealTimeData] = useState(null);
@@ -34,7 +34,7 @@ const App = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-white p-6">
-      <h1 className="text-2xl font-bold text-center mb-4">熱回収システム ダッシュボード</h1>
+      <h1 className="text-2xl font-bold text-center mb-4">排熱回収システム</h1>
 
       {/* ✅ リアルタイムデータ表示（横並び） */}
       {realTimeData && (
