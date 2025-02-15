@@ -1,7 +1,6 @@
 const express = require("express");
 const { CosmosClient } = require("@azure/cosmos");
 const cors = require("cors");
-const WebSocket = require("ws");
 require("dotenv").config();
 
 const app = express();
@@ -9,7 +8,6 @@ const PORT = process.env.PORT || 3097;
 const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
-const wss = new WebSocket.Server({ server });
 
 // Cosmos DB 接続情報
 const endpoint = process.env.COSMOSDB_ENDPOINT;
@@ -22,145 +20,119 @@ const containerId = process.env.CONTAINER_ID;
 app.use(cors());
 app.use(express.json());
 
-// **デバイスリストに `kurodasika` を追加**
-const DEVICE_IDS = [
-  "hainetsukaishu-demo1",
-  "hainetsukaishu-demo2",
-  "takahashigarilei",
-  "kurodasika"
-];
+// 固定デバイス ID
+const DEVICE_ID = "hainetsukaishu-demo1";
 
-// ✅ **1. `/` にルートを追加**
-app.get("/", (req, res) => {
-  res.status(200).json({ message: "Backend is running!" });
-});
-
-// **熱量計算関数**
-function calculatePrice(tempDiff, flow, unitPrice) {
+// 熱量計算関数
+function calculateEnergy(tempDiff, flow) {
   const specificHeat = 4.186; // 水の比熱 (kJ/kg・℃)
   const density = 1000; // 水の密度 (kg/m³)
 
-  const energy_kJ = tempDiff * flow * density * specificHeat;
-  return energy_kJ * unitPrice / 3600; // kJ → kWh
+  return tempDiff * flow * density * specificHeat; // kJ
 }
 
-// ✅ **2. `/api/price/:deviceId` (リアルタイム価格取得)**
-app.get("/api/price/:deviceId", async (req, res) => {
-  const { deviceId } = req.params;
-  console.log("Received deviceId:", deviceId);
+// 料金計算関数（電気代・ガス代・灯油代）
+function calculateCost(energy_kJ) {
+  const kWh = energy_kJ / 3600; // kJ → kWh
 
-  if (!DEVICE_IDS.includes(deviceId)) {
-    console.error("Invalid deviceId:", deviceId);
-    return res.status(400).json({ error: "Invalid deviceId" });
-  }
+  return {
+    electricity: kWh * 30, // 30円/kWh
+    gas: kWh * 20, // 20円/kWh
+    kerosene: kWh * 15, // 15円/kWh
+    heavy_oil: kWh * 10, // 10円/kWh
+  };
+}
 
+// ✅ **リアルタイムの熱量と料金取得**
+app.get("/api/realtime", async (req, res) => {
   try {
     const database = client.database(databaseId);
     const container = database.container(containerId);
-    console.log(`Querying database for deviceId: ${deviceId}`);
 
     const querySpec = {
       query: `SELECT TOP 1 * FROM c WHERE c.device = @deviceId ORDER BY c.time DESC`,
-      parameters: [{ name: "@deviceId", value: deviceId }],
+      parameters: [{ name: "@deviceId", value: DEVICE_ID }],
     };
 
     const { resources: items } = await container.items.query(querySpec).fetchAll();
 
-    console.log("Query result:", items);
-
     if (items.length === 0) {
-      console.error(`No data found for deviceId: ${deviceId}`);
-      return res.status(404).json({ error: `No data found for deviceId: ${deviceId}` });
+      return res.status(404).json({ error: "No data found" });
     }
 
     const latestData = items[0];
-    console.log("Latest Data:", latestData);
     const tempDiff = latestData.tempC4 - latestData.tempC3;
     const flow = latestData.Flow1;
-    console.log("Temperature Difference:", tempDiff);
-    console.log("Flow Rate:", flow);
-    const price = calculatePrice(tempDiff, flow, 0.1);
-    console.log("Calculated Price:", price);
+    const energy = calculateEnergy(tempDiff, flow);
+    const cost = calculateCost(energy);
 
     res.status(200).json({
-      device: deviceId,
+      device: DEVICE_ID,
       time: latestData.time,
-      price: price.toFixed(2)
+      temperature: {
+        tempC1: latestData.tempC1,
+        tempC2: latestData.tempC2,
+        tempC3: latestData.tempC3,
+        tempC4: latestData.tempC4,
+      },
+      flow: latestData.Flow1,
+      energy: energy.toFixed(2),
+      cost,
     });
   } catch (error) {
-    console.error("Error fetching latest price:", error);
-    res.status(500).json({ error: "Failed to fetch price" });
+    console.error("Error fetching realtime data:", error);
+    res.status(500).json({ error: "Failed to fetch data" });
   }
 });
 
-// ✅ **3. `/api/price/hour/:deviceId` (過去1時間の合計価格)**
-app.get("/api/price/hour/:deviceId", async (req, res) => {
-  const { deviceId } = req.params;
-  const unitPrice = 0.1;
-  const now = new Date();
-  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
-
-  if (!DEVICE_IDS.includes(deviceId)) {
-    return res.status(400).json({ error: "Invalid deviceId" });
-  }
-
+// ✅ **過去1日の熱量・料金合計**
+app.get("/api/daily", async (req, res) => {
   try {
     const database = client.database(databaseId);
     const container = database.container(containerId);
+
+    const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setDate(now.getDate() - 1);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setHours(23, 59, 59, 999);
+
     const querySpec = {
-      query: `SELECT * FROM c WHERE c.device = @deviceId AND c.time >= @oneHourAgo ORDER BY c.time DESC`,
+      query: `SELECT * FROM c WHERE c.device = @deviceId AND c.time >= @startOfDay AND c.time <= @endOfDay ORDER BY c.time DESC`,
       parameters: [
-        { name: "@deviceId", value: deviceId },
-        { name: "@oneHourAgo", value: oneHourAgo }
+        { name: "@deviceId", value: DEVICE_ID },
+        { name: "@startOfDay", value: startOfDay.toISOString() },
+        { name: "@endOfDay", value: endOfDay.toISOString() },
       ],
     };
 
     const { resources: items } = await container.items.query(querySpec).fetchAll();
-    const totalPrice = items.reduce((sum, data) => {
+
+    if (items.length === 0) {
+      return res.status(404).json({ error: "No data found for the day" });
+    }
+
+    const totalEnergy = items.reduce((sum, data) => {
       const tempDiff = data.tempC4 - data.tempC3;
       const flow = data.Flow1;
-      return sum + calculatePrice(tempDiff, flow, unitPrice);
+      return sum + calculateEnergy(tempDiff, flow);
     }, 0);
 
-    res.status(200).json({ device: deviceId, totalPrice: totalPrice.toFixed(2) });
+    const totalCost = calculateCost(totalEnergy);
+
+    res.status(200).json({
+      device: DEVICE_ID,
+      totalEnergy: totalEnergy.toFixed(2),
+      totalCost,
+    });
   } catch (error) {
-    console.error("Error fetching hourly price:", error);
-    res.status(500).json({ error: "Failed to fetch hourly price" });
+    console.error("Error fetching daily data:", error);
+    res.status(500).json({ error: "Failed to fetch daily data" });
   }
 });
 
-// ✅ **4. `/api/price/day/:deviceId` (過去1日の合計価格)**
-app.get("/api/price/day/:deviceId", async (req, res) => {
-  const { deviceId } = req.params;
-  const unitPrice = 0.1;
-  const now = new Date();
-  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-
-  if (!DEVICE_IDS.includes(deviceId)) {
-    return res.status(400).json({ error: "Invalid deviceId" });
-  }
-
-  try {
-    const database = client.database(databaseId);
-    const container = database.container(containerId);
-    const querySpec = {
-      query: `SELECT * FROM c WHERE c.device = @deviceId AND c.time >= @oneDayAgo ORDER BY c.time DESC`,
-      parameters: [
-        { name: "@deviceId", value: deviceId },
-        { name: "@oneDayAgo", value: oneDayAgo }
-      ],
-    };
-
-    const { resources: items } = await container.items.query(querySpec).fetchAll();
-    const totalPrice = items.reduce((sum, data) => {
-      const tempDiff = data.tempC4 - data.tempC3;
-      const flow = data.Flow1;
-      return sum + calculatePrice(tempDiff, flow, unitPrice);
-    }, 0);
-
-    res.status(200).json({ device: deviceId, totalPrice: totalPrice.toFixed(2) });
-  } catch (error) {
-    console.error("Error fetching daily price:", error);
-    res.status(500).json({ error: "Failed to fetch daily price" });
-  }
+// サーバー動作確認エンドポイント
+app.get("/", (req, res) => {
+  res.status(200).json({ message: "Backend is running!" });
 });
