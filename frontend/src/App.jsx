@@ -41,22 +41,12 @@ const App = () => {
         <div className="bg-gray-100 p-6 rounded-lg shadow-md">
           <h2 className="text-lg font-semibold text-gray-800 text-center mb-4">リアルタイムデータ</h2>
           <div className="grid grid-cols-4 gap-4 text-center">
-            <div className="bg-white p-4 rounded-md shadow w-48">
-              <h3 className="text-gray-700">給水1</h3>
-              <p className="text-xl font-bold">{realTimeData?.temperature?.tempC1 ?? "N/A"} °C</p>
-            </div>
-            <div className="bg-white p-4 rounded-md shadow w-48">
-              <h3 className="text-gray-700">給水2</h3>
-              <p className="text-xl font-bold">{realTimeData?.temperature?.tempC2 ?? "N/A"} °C</p>
-            </div>
-            <div className="bg-white p-4 rounded-md shadow w-48">
-              <h3 className="text-gray-700">給水3</h3>
-              <p className="text-xl font-bold">{realTimeData?.temperature?.tempC3 ?? "N/A"} °C</p>
-            </div>
-            <div className="bg-white p-4 rounded-md shadow w-48">
-              <h3 className="text-gray-700">給水4</h3>
-              <p className="text-xl font-bold">{realTimeData?.temperature?.tempC4 ?? "N/A"} °C</p>
-            </div>
+            {["tempC1", "tempC2", "tempC3", "tempC4"].map((key, index) => (
+              <div key={index} className="bg-white p-4 rounded-md shadow w-48">
+                <h3 className="text-gray-700">給水{index + 1}</h3>
+                <p className="text-xl font-bold">{realTimeData?.temperature?.[key] ?? "N/A"} °C</p>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -66,22 +56,12 @@ const App = () => {
         <div className="bg-gray-100 p-6 rounded-lg shadow-md mt-6">
           <h2 className="text-lg font-semibold text-gray-800 text-center mb-4">エネルギー単価</h2>
           <div className="grid grid-cols-4 gap-4 text-center">
-            <div className="bg-white p-4 rounded-md shadow w-48">
-              <h3 className="text-gray-700">電気代</h3>
-              <p className="text-xl font-bold">{dailyData?.rates?.electricity ?? 0} 円/kWh</p>
-            </div>
-            <div className="bg-white p-4 rounded-md shadow w-48">
-              <h3 className="text-gray-700">ガス代</h3>
-              <p className="text-xl font-bold">{dailyData?.rates?.gas ?? 0} 円/m³</p>
-            </div>
-            <div className="bg-white p-4 rounded-md shadow w-48">
-              <h3 className="text-gray-700">灯油代</h3>
-              <p className="text-xl font-bold">{dailyData?.rates?.kerosene ?? 0} 円/L</p>
-            </div>
-            <div className="bg-white p-4 rounded-md shadow w-48">
-              <h3 className="text-gray-700">重油代</h3>
-              <p className="text-xl font-bold">{dailyData?.rates?.heavy_oil ?? 0} 円/L</p>
-            </div>
+            {["electricity", "gas", "kerosene", "heavy_oil"].map((key, index) => (
+              <div key={index} className="bg-white p-4 rounded-md shadow w-48">
+                <h3 className="text-gray-700">{key === "electricity" ? "電気代" : key === "gas" ? "ガス代" : key === "kerosene" ? "灯油代" : "重油代"}</h3>
+                <p className="text-xl font-bold">{dailyData?.rates?.[key] ?? 0} {key === "electricity" ? "円/kWh" : key === "gas" ? "円/m³" : "円/L"}</p>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -91,22 +71,31 @@ const App = () => {
         <div className="bg-gray-100 p-6 rounded-lg shadow-md mt-6">
           <h2 className="text-lg font-semibold text-gray-800 text-center mb-4">昨日のコスト</h2>
           <div className="grid grid-cols-4 gap-4 text-center">
-            <div className="bg-white p-4 rounded-md shadow w-48">
-              <h3 className="text-gray-700">電気</h3>
-              <p className="text-xl font-bold">{dailyData?.cost?.electricity ?? 0} 円</p>
-            </div>
-            <div className="bg-white p-4 rounded-md shadow w-48">
-              <h3 className="text-gray-700">ガス</h3>
-              <p className="text-xl font-bold">{dailyData?.cost?.gas ?? 0} 円</p>
-            </div>
-            <div className="bg-white p-4 rounded-md shadow w-48">
-              <h3 className="text-gray-700">灯油</h3>
-              <p className="text-xl font-bold">{dailyData?.cost?.kerosene ?? 0} 円</p>
-            </div>
-            <div className="bg-white p-4 rounded-md shadow w-48">
-              <h3 className="text-gray-700">重油</h3>
-              <p className="text-xl font-bold">{dailyData?.cost?.heavy_oil ?? 0} 円</p>
-            </div>
+            {["electricity", "gas", "kerosene", "heavy_oil"].map((key, index) => (
+              <div key={index} className="bg-white p-4 rounded-md shadow w-48">
+                <h3 className="text-gray-700">{key === "electricity" ? "電気" : key === "gas" ? "ガス" : key === "kerosene" ? "灯油" : "重油"}</h3>
+                <p className="text-xl font-bold">{dailyData?.cost?.[key] ?? 0} 円</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ✅ 年間コストメリット */}
+      {dailyData && (
+        <div className="bg-gray-100 p-6 rounded-lg shadow-md mt-6">
+          <h2 className="text-lg font-semibold text-gray-800 text-center mb-4">年間コストメリット</h2>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            {["240", "300", "365"].map((days) => (
+              <div key={days} className="bg-white p-4 rounded-md shadow w-60">
+                <h3 className="text-gray-700">{days} 日</h3>
+                <ul className="list-none">
+                  {["electricity", "gas", "kerosene", "heavy_oil"].map((key) => (
+                    <li key={key}>{key === "electricity" ? "電気代" : key === "gas" ? "ガス代" : key === "kerosene" ? "灯油代" : "重油代"}: {dailyData?.yearlySavings?.[days]?.[key] ?? 0} 円</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         </div>
       )}
