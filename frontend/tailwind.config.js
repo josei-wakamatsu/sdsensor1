@@ -1,5 +1,6 @@
-module.exports = {
-  content: ["./src/**/*.{js,jsx,ts,tsx}"],  // ✅ Tailwind を適用するファイルの指定
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {},
   },
