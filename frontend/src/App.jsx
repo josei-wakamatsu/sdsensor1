@@ -32,6 +32,14 @@ const App = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // 日本語変換用マッピング
+  const energyLabels = {
+    electricity: "電気代 (円/kWh)",
+    gas: "ガス代 (円/m³)",
+    kerosene: "灯油代 (円/L)",
+    heavy_oil: "重油代 (円/L)",
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-white p-6">
       <h1 className="text-2xl font-bold text-center mb-4">排熱回収システム</h1>
@@ -58,7 +66,7 @@ const App = () => {
           <div className="grid grid-cols-4 gap-4 text-center">
             {Object.entries(realTimeData.unitCosts).map(([key, value], index) => (
               <div key={index} className="bg-white p-4 rounded-md shadow w-48">
-                <h3 className="text-gray-700">{key}</h3>
+                <h3 className="text-gray-700">{energyLabels[key] ?? key}</h3>
                 <p className="text-xl font-bold">{value} 円</p>
               </div>
             ))}
@@ -73,7 +81,7 @@ const App = () => {
           <div className="grid grid-cols-4 gap-4 text-center">
             {Object.entries(dailyData.totalCost).map(([key, value], index) => (
               <div key={index} className="bg-white p-4 rounded-md shadow w-48">
-                <h3 className="text-gray-700">{key}</h3>
+                <h3 className="text-gray-700">{energyLabels[key] ?? key}</h3>
                 <p className="text-xl font-bold">{value} 円</p>
               </div>
             ))}
@@ -91,7 +99,7 @@ const App = () => {
                 <h3 className="text-gray-700">{days} 日</h3>
                 <ul className="list-none">
                   {Object.entries(values).map(([key, value]) => (
-                    <li key={key}>{key}: {value} 円</li>
+                    <li key={key}>{energyLabels[key] ?? key}: {value} 円</li>
                   ))}
                 </ul>
               </div>
