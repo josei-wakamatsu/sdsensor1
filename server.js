@@ -9,7 +9,7 @@ const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 
-// フロントエンドのURLを許可
+// ✅ CORS 設定
 const allowedOrigins = [
   "https://sdsensor-hainetsukaishu.onrender.com", // フロントエンドのURL
   "http://localhost:5173", // ローカル開発用
@@ -30,7 +30,7 @@ app.use(
 
 app.use(express.json());
 
-// ✅ CORSエラーチェックのためのログ
+// ✅ CORS エラーデバッグ用ログ
 app.use((req, res, next) => {
   console.log(`CORS Request from: ${req.headers.origin}`);
   next();
@@ -54,7 +54,25 @@ const unitCosts = {
   heavy_oil: 10,   // 重油代
 };
 
-// ✅ **リアルタイムデータ取得API**
+// 熱量計算関数
+function calculateEnergy(tempDiff, flow) {
+  const specificHeat = 4.186; // 水の比熱 (kJ/kg・℃)
+  const density = 1000; // 水の密度 (kg/m³)
+  return tempDiff * flow * density * specificHeat; // kJ
+}
+
+// 料金計算関数
+function calculateCost(energy_kJ) {
+  const kWh = energy_kJ / 3600; // kJ → kWh
+  return {
+    electricity: (kWh * unitCosts.electricity).toFixed(2),
+    gas: (kWh * unitCosts.gas).toFixed(2),
+    kerosene: (kWh * unitCosts.kerosene).toFixed(2),
+    heavy_oil: (kWh * unitCosts.heavy_oil).toFixed(2),
+  };
+}
+
+// ✅ **リアルタイムの熱量と料金取得**
 app.get("/api/realtime", async (req, res) => {
   try {
     res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
@@ -74,6 +92,11 @@ app.get("/api/realtime", async (req, res) => {
     }
 
     const latestData = items[0];
+    const tempDiff = latestData.tempC4 - latestData.tempC3; // 排水温度差
+    const flow = latestData.Flow1;
+    const energy = calculateEnergy(tempDiff, flow);
+    const cost = calculateCost(energy);
+
     res.status(200).json({
       device: DEVICE_ID,
       time: latestData.time,
@@ -84,9 +107,9 @@ app.get("/api/realtime", async (req, res) => {
         discharge2: latestData.tempC4,
       },
       flow: latestData.Flow1,
-      energy: "0.00",
+      energy: energy.toFixed(2),
       unitCosts,
-      cost: { electricity: "0.00", gas: "0.00", kerosene: "0.00", heavy_oil: "0.00" },
+      cost,
     });
   } catch (error) {
     console.error("Error fetching realtime data:", error);
@@ -94,17 +117,72 @@ app.get("/api/realtime", async (req, res) => {
   }
 });
 
-// ✅ **過去1日のデータ取得API**
+// ✅ **過去1日の熱量・料金合計**
 app.get("/api/daily", async (req, res) => {
   try {
     res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
     res.setHeader("Access-Control-Allow-Credentials", "true");
 
+    const database = client.database(databaseId);
+    const container = database.container(containerId);
+
+    const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setDate(now.getDate() - 1);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const querySpec = {
+      query: `SELECT * FROM c WHERE c.device = @deviceId AND c.time >= @startOfDay AND c.time <= @endOfDay ORDER BY c.time DESC`,
+      parameters: [
+        { name: "@deviceId", value: DEVICE_ID },
+        { name: "@startOfDay", value: startOfDay.toISOString() },
+        { name: "@endOfDay", value: endOfDay.toISOString() },
+      ],
+    };
+
+    const { resources: items } = await container.items.query(querySpec).fetchAll();
+    if (items.length === 0) {
+      return res.status(404).json({ error: "No data found for the day" });
+    }
+
+    // 1日分の熱量合計
+    const totalEnergy = items.reduce((sum, data) => {
+      const tempDiff = data.tempC4 - data.tempC3;
+      const flow = data.Flow1;
+      return sum + calculateEnergy(tempDiff, flow);
+    }, 0);
+
+    const totalCost = calculateCost(totalEnergy);
+    
+    // 年間コストメリット計算
+    const yearlySavings = {
+      "240 days": {
+        electricity: (totalCost.electricity * 240).toFixed(2),
+        gas: (totalCost.gas * 240).toFixed(2),
+        kerosene: (totalCost.kerosene * 240).toFixed(2),
+        heavy_oil: (totalCost.heavy_oil * 240).toFixed(2),
+      },
+      "300 days": {
+        electricity: (totalCost.electricity * 300).toFixed(2),
+        gas: (totalCost.gas * 300).toFixed(2),
+        kerosene: (totalCost.kerosene * 300).toFixed(2),
+        heavy_oil: (totalCost.heavy_oil * 300).toFixed(2),
+      },
+      "365 days": {
+        electricity: (totalCost.electricity * 365).toFixed(2),
+        gas: (totalCost.gas * 365).toFixed(2),
+        kerosene: (totalCost.kerosene * 365).toFixed(2),
+        heavy_oil: (totalCost.heavy_oil * 365).toFixed(2),
+      },
+    };
+
     res.status(200).json({
       device: DEVICE_ID,
-      totalEnergy: "0.00",
-      totalCost: { electricity: "0.00", gas: "0.00", kerosene: "0.00", heavy_oil: "0.00" },
-      yearlySavings: { "240 days": {}, "300 days": {}, "365 days": {} },
+      totalEnergy: totalEnergy.toFixed(2),
+      totalCost,
+      yearlySavings,
     });
   } catch (error) {
     console.error("Error fetching daily data:", error);
@@ -112,7 +190,7 @@ app.get("/api/daily", async (req, res) => {
   }
 });
 
-// ✅ **オプションリクエスト対応**
+// ✅ **OPTIONSリクエスト対応**
 app.options("*", cors());
 
 // ✅ **CORSデバッグ用**
