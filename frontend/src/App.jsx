@@ -51,15 +51,15 @@ const App = () => {
         </div>
       )}
 
-      {/* ✅ 単価の表示 */}
-      {dailyData && (
+      {/* ✅ エネルギー単価 */}
+      {realTimeData && (
         <div className="bg-gray-100 p-6 rounded-lg shadow-md mt-6">
           <h2 className="text-lg font-semibold text-gray-800 text-center mb-4">エネルギー単価</h2>
           <div className="grid grid-cols-4 gap-4 text-center">
-            {["electricity", "gas", "kerosene", "heavy_oil"].map((key, index) => (
+            {Object.entries(realTimeData.unitCosts).map(([key, value], index) => (
               <div key={index} className="bg-white p-4 rounded-md shadow w-48">
-                <h3 className="text-gray-700">{key === "electricity" ? "電気代" : key === "gas" ? "ガス代" : key === "kerosene" ? "灯油代" : "重油代"}</h3>
-                <p className="text-xl font-bold">{dailyData?.rates?.[key] ?? 0} {key === "electricity" ? "円/kWh" : "円/L"}</p>
+                <h3 className="text-gray-700">{key}</h3>
+                <p className="text-xl font-bold">{value} 円</p>
               </div>
             ))}
           </div>
@@ -71,10 +71,10 @@ const App = () => {
         <div className="bg-gray-100 p-6 rounded-lg shadow-md mt-6">
           <h2 className="text-lg font-semibold text-gray-800 text-center mb-4">昨日のコスト</h2>
           <div className="grid grid-cols-4 gap-4 text-center">
-            {["electricity", "gas", "kerosene", "heavy_oil"].map((key, index) => (
+            {Object.entries(dailyData.totalCost).map(([key, value], index) => (
               <div key={index} className="bg-white p-4 rounded-md shadow w-48">
-                <h3 className="text-gray-700">{key === "electricity" ? "電気" : key === "gas" ? "ガス" : key === "kerosene" ? "灯油" : "重油"}</h3>
-                <p className="text-xl font-bold">{dailyData?.cost?.[key] ?? 0} 円</p>
+                <h3 className="text-gray-700">{key}</h3>
+                <p className="text-xl font-bold">{value} 円</p>
               </div>
             ))}
           </div>
@@ -86,12 +86,12 @@ const App = () => {
         <div className="bg-gray-100 p-6 rounded-lg shadow-md mt-6">
           <h2 className="text-lg font-semibold text-gray-800 text-center mb-4">年間コストメリット</h2>
           <div className="grid grid-cols-3 gap-4 text-center">
-            {["240", "300", "365"].map((days) => (
+            {Object.entries(dailyData.yearlySavings).map(([days, values]) => (
               <div key={days} className="bg-white p-4 rounded-md shadow w-60">
                 <h3 className="text-gray-700">{days} 日</h3>
                 <ul className="list-none">
-                  {["electricity", "gas", "kerosene", "heavy_oil"].map((key) => (
-                    <li key={key}>{key === "electricity" ? "電気代" : key === "gas" ? "ガス代" : key === "kerosene" ? "灯油代" : "重油代"}: {dailyData?.yearlySavings?.[days]?.[key] ?? 0} 円</li>
+                  {Object.entries(values).map(([key, value]) => (
+                    <li key={key}>{key}: {value} 円</li>
                   ))}
                 </ul>
               </div>
