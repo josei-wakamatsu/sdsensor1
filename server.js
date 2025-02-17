@@ -9,39 +9,16 @@ const server = app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 
-// ✅ CORS 設定
-const allowedOrigins = [
-  "https://sdsensor-hainetsukaishu.onrender.com", // フロントエンドのURL
-  "http://localhost:5173", // ローカル開発用
-];
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("CORS policy violation"));
-      }
-    },
-    credentials: true,
-  })
-);
-
-app.use(express.json());
-
-// ✅ CORS エラーデバッグ用ログ
-app.use((req, res, next) => {
-  console.log(`CORS Request from: ${req.headers.origin}`);
-  next();
-});
-
 // Cosmos DB 接続情報
 const endpoint = process.env.COSMOSDB_ENDPOINT;
 const key = process.env.COSMOSDB_KEY;
 const client = new CosmosClient({ endpoint, key });
 const databaseId = process.env.DATABASE_ID;
 const containerId = process.env.CONTAINER_ID;
+
+// ミドルウェア
+app.use(cors());
+app.use(express.json());
 
 // 固定デバイス ID
 const DEVICE_ID = "hainetsukaishu-demo1";
@@ -75,9 +52,6 @@ function calculateCost(energy_kJ) {
 // ✅ **リアルタイムの熱量と料金取得**
 app.get("/api/realtime", async (req, res) => {
   try {
-    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-
     const database = client.database(databaseId);
     const container = database.container(containerId);
 
@@ -120,9 +94,6 @@ app.get("/api/realtime", async (req, res) => {
 // ✅ **過去1日の熱量・料金合計**
 app.get("/api/daily", async (req, res) => {
   try {
-    res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-
     const database = client.database(databaseId);
     const container = database.container(containerId);
 
@@ -190,10 +161,7 @@ app.get("/api/daily", async (req, res) => {
   }
 });
 
-// ✅ **OPTIONSリクエスト対応**
-app.options("*", cors());
-
-// ✅ **CORSデバッグ用**
+// サーバー動作確認エンドポイント
 app.get("/", (req, res) => {
   res.status(200).json({ message: "Backend is running!" });
 });
