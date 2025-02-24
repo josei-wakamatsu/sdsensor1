@@ -5,110 +5,87 @@ const backendUrl = "https://sdsensor1.onrender.com";
 
 const App = () => {
   const [realTimeData, setRealTimeData] = useState(null);
-  const [dailyData, setDailyData] = useState(null);
+  const [unitCosts, setUnitCosts] = useState({
+    electricity: 30,
+    gas: 20,
+    kerosene: 15,
+    heavy_oil: 10,
+  });
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchRealTimeData = async () => {
       try {
         const response = await axios.get(`${backendUrl}/api/realtime`);
         setRealTimeData(response.data);
+        setError(null);
       } catch (error) {
-        console.error("リアルタイムデータの取得に失敗しました:", error);
+        setRealTimeData(null);
+        setError("データの取得に失敗しました。");
       }
     };
-
-    const fetchDailyData = async () => {
-      try {
-        const response = await axios.get(`${backendUrl}/api/daily`);
-        setDailyData(response.data);
-      } catch (error) {
-        console.error("1日のデータの取得に失敗しました:", error);
-      }
-    };
-
     fetchRealTimeData();
-    fetchDailyData();
     const interval = setInterval(fetchRealTimeData, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  // 日本語変換用マッピング
-  const energyLabels = {
-    electricity: "電気代 (円/kWh)",
-    gas: "ガス代 (円/m³)",
-    kerosene: "灯油代 (円/L)",
-    heavy_oil: "重油代 (円/L)",
+  const calculateEnergy = (supplyTemp, dischargeTemp, flow) => {
+    const specificHeat = 4.186;
+    const density = 1000;
+    return (supplyTemp - dischargeTemp) * flow * density * specificHeat;
   };
 
-  return (
-    <div className="min-h-screen flex flex-col bg-white p-6">
-      <h1 className="text-2xl font-bold text-center mb-4">排熱回収システム</h1>
+  const calculateCost = (energy_kJ) => {
+    const kWh = energy_kJ / 3600;
+    return {
+      electricity: (kWh * unitCosts.electricity).toFixed(2),
+      gas: (kWh * unitCosts.gas).toFixed(2),
+      kerosene: (kWh * unitCosts.kerosene).toFixed(2),
+      heavy_oil: (kWh * unitCosts.heavy_oil).toFixed(2),
+    };
+  };
 
-      {/* ✅ リアルタイムデータ表示（横並び） */}
+  const handleUnitCostChange = (e) => {
+    setUnitCosts({ ...unitCosts, [e.target.name]: e.target.value });
+  };
+
+  let energy = 0, cost = {};
+  if (realTimeData) {
+    energy = calculateEnergy(realTimeData.temperature.supply1, realTimeData.temperature.discharge1, realTimeData.flow);
+    cost = calculateCost(energy);
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col items-center bg-white p-6">
+      <h1 className="text-2xl font-bold text-center mb-6">排熱回収システム</h1>
+
+      {/* 単価入力 */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        {Object.keys(unitCosts).map((key) => (
+          <div key={key} className="flex flex-col">
+            <label className="text-gray-700">{key} (円/kWh)</label>
+            <input
+              type="number"
+              name={key}
+              value={unitCosts[key]}
+              onChange={handleUnitCostChange}
+              className="border rounded p-2"
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* 計算結果 */}
       {realTimeData && (
         <div className="bg-gray-100 p-6 rounded-lg shadow-md">
-          <h2 className="text-lg font-semibold text-gray-800 text-center mb-4">リアルタイムデータ</h2>
-          <div className="grid grid-cols-4 gap-4 text-center">
-            {["supply1", "supply2", "discharge1", "discharge2"].map((key, index) => (
-              <div key={index} className="bg-white p-4 rounded-md shadow w-48">
-                <h3 className="text-gray-700">{key.includes("supply") ? `給水${index + 1}` : `排水${index - 1}`}</h3>
-                <p className="text-xl font-bold">{realTimeData?.temperature?.[key] ?? "N/A"} °C</p>
-              </div>
-            ))}
-          </div>
+          <h2 className="text-lg font-semibold text-gray-800 text-center mb-4">計算結果</h2>
+          <p>熱量: {energy.toFixed(2)} kJ</p>
+          <p>電気代: {cost.electricity} 円</p>
+          <p>ガス代: {cost.gas} 円</p>
+          <p>灯油代: {cost.kerosene} 円</p>
+          <p>重油代: {cost.heavy_oil} 円</p>
         </div>
       )}
-
-      {/* ✅ エネルギー単価 */}
-      {realTimeData && (
-        <div className="bg-gray-100 p-6 rounded-lg shadow-md mt-6">
-          <h2 className="text-lg font-semibold text-gray-800 text-center mb-4">エネルギー単価</h2>
-          <div className="grid grid-cols-4 gap-4 text-center">
-            {Object.entries(realTimeData.unitCosts).map(([key, value], index) => (
-              <div key={index} className="bg-white p-4 rounded-md shadow w-48">
-                <h3 className="text-gray-700">{energyLabels[key] ?? key}</h3>
-                <p className="text-xl font-bold">{value} 円</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ✅ 昨日のコスト計算結果 */}
-      {dailyData && (
-        <div className="bg-gray-100 p-6 rounded-lg shadow-md mt-6">
-          <h2 className="text-lg font-semibold text-gray-800 text-center mb-4">昨日のコスト</h2>
-          <div className="grid grid-cols-4 gap-4 text-center">
-            {Object.entries(dailyData.totalCost).map(([key, value], index) => (
-              <div key={index} className="bg-white p-4 rounded-md shadow w-48">
-                <h3 className="text-gray-700">{energyLabels[key] ?? key}</h3>
-                <p className="text-xl font-bold">{value} 円</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ✅ 年間コストメリット */}
-      {dailyData && (
-        <div className="bg-gray-100 p-6 rounded-lg shadow-md mt-6">
-          <h2 className="text-lg font-semibold text-gray-800 text-center mb-4">年間コストメリット</h2>
-          <div className="grid grid-cols-3 gap-4 text-center">
-            {Object.entries(dailyData.yearlySavings).map(([days, values]) => (
-              <div key={days} className="bg-white p-4 rounded-md shadow w-60">
-                <h3 className="text-gray-700">{days} 日</h3>
-                <ul className="list-none">
-                  {Object.entries(values).map(([key, value]) => (
-                    <li key={key}>{energyLabels[key] ?? key}: {value} 円</li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <p className="text-gray-500 text-sm text-center mt-10">© 2006-2025 株式会社 ショウワ 無断転載禁止。</p>
     </div>
   );
 };
